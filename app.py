@@ -30,6 +30,7 @@ def create_app(test_config=None):
         SESSION_TYPE='cachelib',
         SESSION_CACHELIB=FileSystemCache(str(private_dir / 'sessions'), threshold=100),
         SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SECURE=os.getenv('SPOTIFY_REDIRECT_URI', '').startswith('https://'),
         SESSION_COOKIE_SAMESITE='Lax',
         PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
         MAX_CONTENT_LENGTH=32 * 1024,
@@ -191,5 +192,17 @@ def create_app(test_config=None):
     return app
 
 
+def main():
+    cert = os.getenv('SSL_CERT_FILE')
+    key = os.getenv('SSL_KEY_FILE')
+    if bool(cert) != bool(key):
+        raise ValueError('Set both SSL_CERT_FILE and SSL_KEY_FILE to enable HTTPS.')
+    app = create_app()
+    if cert:
+        app.config['SESSION_COOKIE_SECURE'] = True
+    app.run(host=os.getenv('HOST', '0.0.0.0'), port=int(os.getenv('PORT', '8484')),
+            ssl_context=(cert, key) if cert else None, debug=False)
+
+
 if __name__ == '__main__':
-    create_app().run(host='127.0.0.1', port=8484, debug=False)
+    main()

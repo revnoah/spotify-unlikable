@@ -1,6 +1,6 @@
 # Unlikable
 
-A local Python / Flask app for cleaning up Spotify Liked Songs. Search by keyword, artist, or album; combine filters; select individual tracks or every match across pages; review the complete selection; then bulk unlike in batches of 40. Runs on **8484**.
+A local Python / Flask app for cleaning up Spotify Liked Songs. Search by keyword, artist, or album; combine filters; select individual tracks or every match across pages; review the complete selection; then bulk unlike in batches of 40. Runs on port **8484**, with access from other devices on your network.
 
 ## About
 
@@ -50,6 +50,9 @@ The app loads `.env` through python-dotenv. Existing process environment variabl
 | `SPOTIFY_CLIENT_ID` | For Spotify | Empty; developer app client ID. |
 | `SPOTIFY_CLIENT_SECRET` | For Spotify | Empty; developer app secret. |
 | `SPOTIFY_REDIRECT_URI` | Optional | `http://127.0.0.1:8484/callback`; must match the registered URI. Changing it does not change the server’s host or port. |
+| `HOST` | Optional | `0.0.0.0`; listen on all network interfaces. Use `127.0.0.1` for access from this PC only. |
+| `PORT` | Optional | `8484`; listening port. |
+| `SSL_CERT_FILE` / `SSL_KEY_FILE` | Optional | Paths to a PEM certificate and private key; set both to serve HTTPS directly. |
 | `SECRET_KEY` | Recommended | Random per startup if empty; set a private stable Flask secret key. |
 
 ### Spotify setup
@@ -60,6 +63,26 @@ The app loads `.env` through python-dotenv. Existing process environment variabl
 4. For development mode, the app owner needs Spotify Premium. Add any other intended account to the app’s allowed users in the dashboard.
 5. Connect Spotify and grant `user-library-read` and `user-library-modify`.
 
+### Access from another PC
+
+Install and configure the app on the PC that will run it, then start it with `./run.sh` (Bash) or `python app.py` with the virtual environment active. It listens on all network interfaces by default. Find that PC’s LAN IPv4 address using `hostname -I` on Linux or `ipconfig` on Windows. From another device on the same network, open, for example, **http://192.168.1.50:8484**, replacing the address with the server PC’s IP. Allow inbound TCP port 8484 through that PC’s firewall for your private network if needed. Keep the server running while using the app. `0.0.0.0` is a listening address; use the PC’s actual IP in your browser.
+
+The demo works over HTTP. For Spotify sign-in from another PC, [Spotify requires HTTPS for non-loopback redirect addresses](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri). Leaving the redirect at `127.0.0.1` would send the browser back to the device you are browsing on.
+
+To serve HTTPS directly, obtain a certificate valid for the server’s LAN IP and trusted by the client device (for a private LAN, a local certificate authority can issue it), then configure `.env`:
+
+```dotenv
+HOST=0.0.0.0
+PORT=8484
+SSL_CERT_FILE=/path/to/server-cert.pem
+SSL_KEY_FILE=/path/to/server-key.pem
+SPOTIFY_REDIRECT_URI=https://192.168.1.50:8484/callback
+```
+
+Register that exact HTTPS callback in your Spotify developer app, restart Unlikable, and open **https://192.168.1.50:8484** on the client PC. Use the same scheme, IP, and port throughout sign-in so the session cookie is retained. HTTPS configuration enables secure session cookies. Reserve the server’s IP in your router to keep the URL stable. You can also place an HTTPS reverse proxy in front of the app and set `SPOTIFY_REDIRECT_URI` to its externally accessible callback URL.
+
+Use this setup on a trusted private network; do not forward the port from your router to the internet. Public hosting requires a production WSGI server and HTTPS.
+
 ## Usage
 
 Choose **Try a demo library** to explore without credentials, or **Connect Spotify** after configuration. Wait for the full library to load. For the Minecraft cleanup, enter `minecraft` in Keyword, inspect the results, then choose **Select all matches**. Also search terms such as `creeper`, `diamond`, or a known artist. These are text matches, not automatic genre detection: some Minecraft music won’t contain those words. Artist and album inputs provide suggestions and accept partial matches. Filters combine using AND; keyword is a phrase matched anywhere in title, artist, or album. Selections persist across filters, and review includes hidden selections. Choose **Review & unlike**, inspect the song list, then confirm with **Unlike selected songs**. In demo mode, removal only changes the temporary browser library; reloading restores the demo data.
@@ -68,7 +91,7 @@ The app loads every page before enabling removal. A reload clears selections. Un
 
 ## Local operation
 
-OAuth tokens and loaded track IDs are stored in server-side session files in `instance/sessions`; the browser receives a session identifier cookie, track metadata for display, and a CSRF token for requests. The session lifetime is configured to eight hours; expired cache files may remain on disk until cache cleanup. Disconnect clears the local session; revoke access from your Spotify account’s Apps page if needed. Keep `instance/` private. The server binds to loopback and disables debug mode. This is intended for local use; public hosting would require HTTPS, secure cookies, and a production WSGI server.
+OAuth tokens and loaded track IDs are stored in server-side session files in `instance/sessions`; the browser receives a session identifier cookie, track metadata for display, and a CSRF token for requests. The session lifetime is configured to eight hours; expired cache files may remain on disk until cache cleanup. Disconnect clears the local session; revoke access from your Spotify account’s Apps page if needed. Keep `instance/` private. The server binds to all interfaces by default and disables debug mode. Set `HOST=127.0.0.1` to restrict access to the server PC. See the network setup above for HTTPS and Spotify sign-in from other devices.
 
 Without a configured `SECRET_KEY`, a fresh random key is used on each process startup. Session persistence also depends on the local session cache; this app does not configure signed session identifiers. Library loading and removal use sequential requests, avoiding overlapping session updates from this UI. Avoid using multiple tabs to change the same library simultaneously.
 

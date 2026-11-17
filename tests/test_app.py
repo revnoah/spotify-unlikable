@@ -1,10 +1,36 @@
+import os
 import tempfile
 import time
 import unittest
 from unittest.mock import Mock, patch
 
 from cachelib.file import FileSystemCache
-from app import create_app
+from app import create_app, main
+
+
+class StartupTests(unittest.TestCase):
+    @patch.dict(os.environ, {}, clear=True)
+    @patch('app.create_app')
+    def test_default_listens_on_network_without_debug(self, factory):
+        main()
+        factory.return_value.run.assert_called_once_with(
+            host='0.0.0.0', port=8484, ssl_context=None, debug=False)
+
+    @patch.dict(os.environ, {'HOST': '192.168.1.50', 'PORT': '9443',
+                            'SSL_CERT_FILE': 'cert.pem', 'SSL_KEY_FILE': 'key.pem'}, clear=True)
+    @patch('app.create_app')
+    def test_configured_https_listener(self, factory):
+        main()
+        factory.return_value.run.assert_called_once_with(
+            host='192.168.1.50', port=9443, ssl_context=('cert.pem', 'key.pem'), debug=False)
+        self.assertTrue(factory.return_value.config['SESSION_COOKIE_SECURE'])
+
+    @patch.dict(os.environ, {'SSL_CERT_FILE': 'cert.pem'}, clear=True)
+    @patch('app.create_app')
+    def test_incomplete_https_configuration_fails(self, factory):
+        with self.assertRaisesRegex(ValueError, 'Set both'):
+            main()
+        factory.assert_not_called()
 
 
 class AppTests(unittest.TestCase):
